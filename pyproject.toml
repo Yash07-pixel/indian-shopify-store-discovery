@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "indian-shopify-store-discovery"
+version = "0.1.0"
+description = "A resumable, evidence-first pipeline for discovering Indian Shopify stores."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+  "beautifulsoup4>=4.12,<5",
+  "dnspython>=2.7,<3",
+  "httpx[http2]>=0.28,<1",
+  "phonenumbers>=8.13,<10",
+  "pydantic>=2.10,<3",
+  "selectolax>=0.3,<1",
+  "tldextract>=5.1,<6",
+  "typer>=0.15,<1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3,<9", "pytest-asyncio>=0.25,<1", "respx>=0.22,<1"]
+
+[project.scripts]
+shopify-india = "shopify_india.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/shopify_india"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+markers = ["live: opt-in tests that make live network requests"]
+asyncio_mode = "auto"
+
