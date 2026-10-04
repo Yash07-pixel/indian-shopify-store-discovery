@@ -2,7 +2,7 @@
 
 This repository contains a resumable pipeline for discovering Shopify stores whose public websites provide evidence that the operating business is situated in India.
 
-> **Current snapshot status (4 October 2026):** the refreshed export contains **1,251 unique, currently verified storefront domains** from two public candidate sources. Automated validation is complete; the new 100-row worksheet at `reports/manual_audit_v2.csv` still requires human review before submission.
+
 
 ## Why the pipeline verifies twice
 
