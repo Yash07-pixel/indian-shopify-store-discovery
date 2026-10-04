@@ -1,22 +1,40 @@
 {
-  "accepted_records": 4,
+  "accepted_candidate_records": 1288,
+  "accepted_records": 1251,
   "candidate_status_counts": {
-    "accepted": 4,
-    "pending": 9742,
-    "rejected": 16
+    "accepted": 1288,
+    "failed": 1348,
+    "pending": 34992,
+    "rejected": 3061,
+    "retry": 24
   },
   "category_distribution": {
-    "electronics": 2,
-    "men's apparel": 1,
-    "women's apparel": 1
+    "arts/crafts": 55,
+    "automotive": 9,
+    "books/stationery": 23,
+    "electronics": 66,
+    "food/beverage": 90,
+    "footwear": 28,
+    "general merchandise": 8,
+    "gifts": 41,
+    "health/wellness": 96,
+    "home decor/furniture": 87,
+    "jewelry/accessories": 213,
+    "kids/baby": 60,
+    "men's apparel": 108,
+    "pet supplies": 15,
+    "skincare/beauty": 115,
+    "sports/outdoors": 47,
+    "toys/games": 8,
+    "women's apparel": 182
   },
   "confidence": {
-    "average_india_score": 12.75,
-    "average_shopify_score": 10.25,
-    "minimum_india_score": 8,
-    "minimum_shopify_score": 9
+    "average_india_score": 12.14,
+    "average_shopify_score": 9.33,
+    "minimum_india_score": 5,
+    "minimum_shopify_score": 7
   },
-  "generated_at": "2026-10-02T18:21:08.564426+00:00",
+  "generated_at": "2026-10-04T08:46:07.788457+00:00",
   "manual_audit": {
     "reviewed": 0,
     "status": "not_reviewed"
@@ -27,43 +45,89 @@
       "percent": 0.0
     },
     "contacts": {
-      "count": 0,
-      "percent": 0.0
+      "count": 9,
+      "percent": 0.72
     },
     "description": {
-      "count": 0,
-      "percent": 0.0
+      "count": 10,
+      "percent": 0.8
     },
     "logo_url": {
-      "count": 1,
-      "percent": 25.0
+      "count": 46,
+      "percent": 3.68
     },
     "socials": {
-      "count": 0,
-      "percent": 0.0
+      "count": 143,
+      "percent": 11.43
     },
     "state": {
-      "count": 0,
-      "percent": 0.0
+      "count": 16,
+      "percent": 1.28
     }
   },
-  "processed_records": 20,
+  "processed_records": 4349,
+  "redirect_duplicates_removed": 37,
   "rejection_reasons": {
-    "conflicting_state_evidence": 3,
-    "insufficient_india_evidence": 12,
-    "insufficient_shopify_evidence": 7,
-    "robots_disallowed": 1
+    "captcha_only": 1,
+    "conflicting_state_evidence": 528,
+    "homepage_status_200": 1,
+    "homepage_status_401": 1,
+    "homepage_status_402": 1,
+    "homepage_status_403": 92,
+    "homepage_status_404": 54,
+    "homepage_status_406": 1,
+    "homepage_status_409": 7,
+    "homepage_status_423": 19,
+    "homepage_status_500": 4,
+    "homepage_status_503": 4,
+    "homepage_status_521": 3,
+    "homepage_status_522": 5,
+    "homepage_status_525": 2,
+    "homepage_status_530": 1,
+    "insufficient_india_evidence": 1721,
+    "insufficient_shopify_evidence": 538,
+    "parked_domain": 17,
+    "password_protected": 35,
+    "robots_disallowed": 468
   },
   "source_yield": {
+    "shopify_master_list_indian_tld": {
+      "accepted": 302,
+      "seen": 837
+    },
     "teamdukaan_public_list": {
-      "accepted": 4,
-      "seen": 19
+      "accepted": 986,
+      "seen": 3511
     }
   },
   "state_distribution": {
-    "Gujarat": 1,
-    "Haryana": 1,
-    "Maharashtra": 1,
-    "Rajasthan": 1
+    "Andhra Pradesh": 4,
+    "Assam": 7,
+    "Bihar": 2,
+    "Chandigarh": 8,
+    "Chhattisgarh": 8,
+    "Delhi": 232,
+    "Goa": 5,
+    "Gujarat": 109,
+    "Haryana": 114,
+    "Himachal Pradesh": 2,
+    "Jammu and Kashmir": 5,
+    "Jharkhand": 1,
+    "Karnataka": 98,
+    "Kerala": 30,
+    "Madhya Pradesh": 20,
+    "Maharashtra": 228,
+    "Meghalaya": 2,
+    "Odisha": 7,
+    "Puducherry": 1,
+    "Punjab": 34,
+    "Rajasthan": 91,
+    "Sikkim": 1,
+    "Tamil Nadu": 77,
+    "Telangana": 43,
+    "Uttar Pradesh": 58,
+    "Uttarakhand": 1,
+    "West Bengal": 47,
+    "missing": 16
   }
 }

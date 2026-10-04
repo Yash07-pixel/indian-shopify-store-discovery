@@ -28,6 +28,28 @@ STATE_ALIASES = {
 GSTIN_RE = re.compile(r"\b(0[1-9]|[12][0-9]|3[0-8]|97)[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]\b", re.I)
 PIN_RE = re.compile(r"(?<!\d)[1-9][0-9]{5}(?!\d)")
 
+# Conservative postal prefixes whose first two/three digits belong to one
+# state. Ambiguous postal circles are intentionally omitted rather than guessed.
+PIN_SPECIAL_PREFIXES = {
+    "160": "Chandigarh", "194": "Ladakh", "403": "Goa", "605": "Puducherry",
+    "682": "Lakshadweep", "737": "Sikkim", "744": "Andaman and Nicobar Islands",
+}
+PIN_TWO_DIGIT_STATES = {
+    "11": "Delhi", "12": "Haryana", "13": "Haryana", "14": "Punjab", "15": "Punjab",
+    "16": "Punjab", "17": "Himachal Pradesh", "30": "Rajasthan", "31": "Rajasthan",
+    "32": "Rajasthan", "33": "Rajasthan", "34": "Rajasthan", "36": "Gujarat",
+    "37": "Gujarat", "38": "Gujarat", "39": "Gujarat", "40": "Maharashtra",
+    "41": "Maharashtra", "42": "Maharashtra", "43": "Maharashtra", "44": "Maharashtra",
+    "45": "Madhya Pradesh", "46": "Madhya Pradesh", "47": "Madhya Pradesh",
+    "48": "Madhya Pradesh", "49": "Chhattisgarh", "50": "Telangana",
+    "51": "Andhra Pradesh", "52": "Andhra Pradesh", "53": "Andhra Pradesh",
+    "56": "Karnataka", "57": "Karnataka", "58": "Karnataka", "59": "Karnataka",
+    "60": "Tamil Nadu", "61": "Tamil Nadu", "62": "Tamil Nadu", "63": "Tamil Nadu",
+    "64": "Tamil Nadu", "67": "Kerala", "68": "Kerala", "69": "Kerala",
+    "70": "West Bengal", "71": "West Bengal", "72": "West Bengal", "73": "West Bengal",
+    "74": "West Bengal", "75": "Odisha", "76": "Odisha", "77": "Odisha", "78": "Assam",
+}
+
 
 def find_gstins(text: str) -> list[str]:
     return sorted({match.group(0).upper() for match in GSTIN_RE.finditer(text)})
@@ -48,4 +70,15 @@ def find_states(text: str) -> list[str]:
 
 def has_indian_pin(text: str) -> bool:
     return bool(PIN_RE.search(text))
+
+
+def find_pins(text: str) -> list[str]:
+    return sorted({match.group(0) for match in PIN_RE.finditer(text)})
+
+
+def state_from_pin(pin: str) -> str:
+    digits = re.sub(r"\D", "", pin)
+    if len(digits) != 6:
+        return ""
+    return PIN_SPECIAL_PREFIXES.get(digits[:3], PIN_TWO_DIGIT_STATES.get(digits[:2], ""))
 

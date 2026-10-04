@@ -5,7 +5,7 @@ from shopify_india.normalize import (
     normalize_url,
     registrable_domain,
 )
-from shopify_india.states import find_gstins, find_states, state_from_gstin
+from shopify_india.states import find_gstins, find_states, state_from_gstin, state_from_pin
 
 
 def test_normalize_url_and_domain() -> None:
@@ -22,6 +22,8 @@ def test_contacts_are_normalized_and_placeholders_removed() -> None:
 
 def test_social_query_is_removed() -> None:
     assert canonical_social_url("https://www.instagram.com/brand/?utm_source=site") == "https://instagram.com/brand"
+    assert canonical_social_url("https://instagram.com/p/ABC") == ""
+    assert canonical_social_url("https://facebook.com/profile.php?id=123") == "https://facebook.com/profile.php?id=123"
 
 
 def test_states_and_gstin() -> None:
@@ -29,4 +31,6 @@ def test_states_and_gstin() -> None:
     assert find_gstins(f"GSTIN: {gstin}") == [gstin]
     assert state_from_gstin(gstin) == "Maharashtra"
     assert find_states("Registered in Orissa and NCT of Delhi") == ["Delhi", "Odisha"]
+    assert state_from_pin("500033") == "Telangana"
+    assert state_from_pin("400067") == "Maharashtra"
 

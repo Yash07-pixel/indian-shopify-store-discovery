@@ -2,7 +2,7 @@
 
 This repository contains a resumable pipeline for discovering Shopify stores whose public websites provide evidence that the operating business is situated in India.
 
-> **Current snapshot status:** the checked-in result is a four-store live smoke sample used to validate the pipeline end to end. It is **not the final assignment submission**. Run the full `--target 1200` crawl, complete the 100-row manual audit, confirm at least 95% precision, and commit the regenerated outputs before sending the repository to an evaluator.
+> **Current snapshot status (4 October 2026):** the refreshed export contains **1,251 unique, currently verified storefront domains** from two public candidate sources. Automated validation is complete; the new 100-row worksheet at `reports/manual_audit_v2.csv` still requires human review before submission.
 
 ## Why the pipeline verifies twice
 
@@ -46,9 +46,9 @@ A store passes only with two strong signal types, or one strong signal plus an i
 
 “Indian” means the website identifies an Indian operating or registered business location. A `.in` domain, INR prices, or India shipping by itself is insufficient.
 
-Strong evidence is a GSTIN, structured Indian organization address, registered/business-office text naming India, or an Indian state next to a valid six-digit PIN. Supporting evidence includes a valid `+91` phone, `.in` domain, INR storefront, or India shipping/returns language.
+Strong evidence is a GSTIN, structured Indian organization address, explicit registered/corporate/business-office text naming India, or an Indian state next to a valid six-digit PIN. Generic customer-facing phrases such as “delivery address in India” are not registered-office evidence. Conservative, unambiguous PIN prefixes can normalize a missing state name. Supporting evidence includes a valid `+91` phone, `.in` domain, INR storefront, or India shipping/returns language.
 
-Acceptance requires at least one strong signal and one independent supporting signal. State names are normalized across all states and union territories; GSTIN prefixes can provide the state. Conflicting state evidence rejects the row for manual review instead of guessing.
+Acceptance requires at least one strong signal and one independent supporting signal. State names are normalized across all states and union territories; GSTIN prefixes can provide the state. Registered-office evidence outranks ordinary contact, manufacturing, and footer addresses. Shipping lists never determine state. Equally strong conflicting states reject the row for manual review instead of guessing.
 
 ### 5. Extract requested fields
 
@@ -57,12 +57,12 @@ The final CSV has exactly seven columns:
 | Column | Rule |
 |---|---|
 | `domain_url` | Final live storefront origin after redirects |
-| `contacts` | JSON with all public, valid business emails and Indian phone numbers |
-| `socials` | JSON with canonical Instagram, Facebook, X, LinkedIn and YouTube profile URLs |
-| `category` | Controlled category inferred from product structured data, collections, navigation and copy |
-| `description` | Own-site meta description, structured description, hero text or About introduction, in that order |
-| `logo_url` | Organization structured-data logo or visible header logo; favicon/icon URLs are rejected |
-| `state` | Structured address, public address text, or GSTIN-derived canonical state |
+| `contacts` | JSON with public business mailto/tel links, Contact/footer/legal-contact details and WhatsApp numbers; masked and third-party developer/registrar contacts are rejected |
+| `socials` | JSON with canonical Instagram, Facebook, X, LinkedIn and YouTube profile URLs; posts, reels, sharing links and incomplete profiles are rejected |
+| `category` | Controlled category led by the store's own description, then product structured data, collections and navigation |
+| `description` | Homepage meta/organization description, hero text or About introduction; Contact and policy boilerplate are rejected |
+| `logo_url` | Organization structured-data or scored header logo using `src`, lazy-load and `srcset`; favicon, product, payment and logo-wall assets are rejected |
+| `state` | GSTIN, structured/registered address, context-sized address evidence or conservative PIN-derived state |
 
 Every accepted row also has a JSONL audit record containing evidence, scores, source pages, redirects, extraction provenance and check time.
 
@@ -86,7 +86,7 @@ pytest
 No paid API or API key is required. Before a public crawl, set a user agent that identifies the published repository:
 
 ```powershell
-$env:SHOPIFY_INDIA_USER_AGENT = "RivyouShopifyResearch/0.1 (+https://github.com/YOUR_USERNAME/indian-shopify-store-discovery)"
+$env:SHOPIFY_INDIA_USER_AGENT = "RivyouShopifyResearch/0.2 (+https://github.com/Yash07-pixel/indian-shopify-store-discovery)"
 ```
 
 ## Running
@@ -109,6 +109,30 @@ python -m shopify_india audit-sample --size 100 --seed 20261002
 python -m shopify_india report
 ```
 
+If a manual audit reveals systematic field-extraction errors, repair the rules and re-extract without repeating Shopify DNS/cart verification:
+
+```powershell
+# Test only rows already reviewed in the worksheet
+python -m shopify_india reextract --audit-file reports\manual_audit.csv --only-reviewed
+
+# Apply the current extractor version to every accepted record
+python -m shopify_india reextract
+
+# Recheck only rows whose sole strong India proof is registered-office text
+python -m shopify_india reextract --only-registered-india
+```
+
+`reextract` fetches a fresh homepage, reuses cached secondary pages, and only probes missing Contact/About/Privacy page roles. It writes an extraction-version checkpoint after each successful record. If interrupted, run the same command again; completed rows are skipped and transient errors are retried. Use `--force` only when intentionally repeating the current extractor version.
+
+To add independently sourced stores after the first run, import the public
+master list and process only candidates attributed to that source. For example,
+the following grows a 1,171-domain result to 1,550 unique final domains:
+
+```powershell
+python -m shopify_india discover
+python -m shopify_india run --source shopify_master_list_indian_tld --unique-target 1550 --skip-discovery
+```
+
 `run` resumes pending/retry rows from `data/pipeline.sqlite3`; stopping it does not discard completed work. Use `python -m shopify_india status` to see progress. `--skip-master` avoids the large master-list download during a quick smoke test.
 
 ## Outputs
@@ -117,8 +141,23 @@ python -m shopify_india report
 - `data/results/audit_evidence.jsonl` — row-level proof and provenance
 - `reports/quality_report.json` — counts, rejection reasons, missingness, distributions and source yield
 - `reports/manual_audit.csv` — reproducible human-review worksheet
+- `reports/manual_audit_v2.csv` — post-repair 100-row worksheet; this separate file preserves the first audit attempt
 
-The report discloses missing values rather than inventing them. Many legitimate stores do not publish every phone, social profile, description, logo or unambiguous state.
+The report discloses missing values rather than inventing them. Many legitimate stores do not publish every phone, social profile, description, logo or unambiguous state. The audit worksheet records Shopify and India correctness separately and includes per-field checks for contacts, socials, category, description, logo and state.
+
+### Current output checks
+
+- 1,251 CSV rows and 1,251 matching JSONL evidence records
+- 1,251 unique canonical domains; zero export duplicates
+- zero malformed `contacts` or `socials` JSON values
+- zero favicon, apple-touch, sprite, or tracking URLs accepted as logos
+- 28 automated tests passing
+- missing contacts: 9 (0.72%)
+- missing socials: 143 (11.43%)
+- missing category: 0 (0.00%)
+- missing description: 10 (0.80%)
+- missing logo: 46 (3.68%)
+- missing state: 16 (1.28%)
 
 ## Assumptions and edge cases
 
@@ -139,11 +178,12 @@ Public pages change after collection, false signals remain possible, and restric
 
 ## Runtime and effort
 
-The software records timestamps and pipeline counts, but actual wall-clock runtime depends on network conditions, robots rules and retries. Fill in the following only after completing the final run and manual audit:
+The software records timestamps and pipeline counts, but actual wall-clock runtime depends on network conditions, robots rules and retries. The context-aware refresh ran across resumable sessions from `2026-10-04T02:06:44Z` to `2026-10-04T08:15:19Z`, an observed elapsed span of **6 hours 8 minutes 35 seconds**, including staged validation, intentional restarts, and retry diagnosis.
 
-- Development and validation time: **TBD after completion**
-- Full crawl runtime: **TBD after completion**
-- Manual audit precision: **TBD after reviewing `reports/manual_audit.csv`**
+- Development and validation time: **submitter must record actual hands-on time before submission; it is not inferred from file timestamps**
+- Candidate crawl runtime: **run over multiple resumable sessions; record the submitter's observed total before submission**
+- Context-aware extraction refresh: **6h 08m 35s elapsed**
+- Manual audit precision: **pending review of `reports/manual_audit_v2.csv`**
 
 ## License
 

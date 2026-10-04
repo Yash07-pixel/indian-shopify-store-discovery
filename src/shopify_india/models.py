@@ -49,6 +49,7 @@ class StoreRecord(BaseModel):
     redirect_history: list[str] = Field(default_factory=list)
     checked_at: str = Field(default_factory=utc_now)
     source_names: list[str] = Field(default_factory=list)
+    extraction_version: int = 1
 
     def audit_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

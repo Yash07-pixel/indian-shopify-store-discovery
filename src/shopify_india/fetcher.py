@@ -59,6 +59,10 @@ class RespectfulFetcher:
             return None
 
     def _save_cache(self, record: FetchRecord) -> None:
+        # Large storefront pages caused multi-gigabyte cache growth during the
+        # first crawl. Small pages still help resumes without threatening disk.
+        if len(record.body.encode("utf-8", errors="ignore")) > self.settings.max_cache_entry_bytes:
+            return
         path = self._cache_path(record.requested_url)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(record.model_dump_json(), encoding="utf-8")
@@ -147,7 +151,7 @@ class RespectfulFetcher:
                     headers={k.lower(): v for k, v in response.headers.items()},
                     redirect_history=[str(item.url) for item in response.history],
                 )
-                if response.status_code < 400:
+                if response.status_code < 400 and use_cache:
                     self._save_cache(record)
                 return record
             except (httpx.HTTPError, UnicodeError) as exc:
@@ -157,7 +161,7 @@ class RespectfulFetcher:
         raise FetchError(last_error or "request failed")
 
     async def validate_image(self, url: str) -> bool:
-        if not url or any(token in url.lower() for token in ("favicon", "apple-touch", "sprite", "pixel", "tracking")):
+        if not url or any(token in url.lower() for token in ("favicon", "apple-touch", "sprite", "tracking")):
             return False
         try:
             if not await self.allowed(url):

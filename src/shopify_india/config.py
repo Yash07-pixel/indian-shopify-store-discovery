@@ -6,8 +6,8 @@ from pathlib import Path
 
 
 DEFAULT_USER_AGENT = (
-    "RivyouShopifyResearch/0.1 "
-    "(+https://github.com/YOUR_USERNAME/indian-shopify-store-discovery)"
+    "RivyouShopifyResearch/0.2 "
+    "(+https://github.com/Yash07-pixel/indian-shopify-store-discovery)"
 )
 
 
@@ -25,6 +25,7 @@ class Settings:
     retries: int = 2
     max_pages_per_store: int = 8
     max_response_bytes: int = 5 * 1024 * 1024
+    max_cache_entry_bytes: int = 128 * 1024
 
     @classmethod
     def from_root(cls, root: Path | None = None) -> "Settings":

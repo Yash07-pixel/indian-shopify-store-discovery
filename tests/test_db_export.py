@@ -40,5 +40,32 @@ def test_database_is_resumable_and_exports_exact_schema(tmp_path) -> None:
     assert json.loads(evidence_path.read_text(encoding="utf-8").splitlines()[0])["accepted"] is True
 
     assert write_report(db, tmp_path / "reports").exists()
-    assert write_audit_sample(db, tmp_path / "reports", 100, 1).exists()
+    audit_path = write_audit_sample(db, tmp_path / "reports", 100, 1)
+    audit_rows = list(csv.DictReader(audit_path.open(encoding="utf-8")))
+    assert audit_rows[0]["contacts"]
+    assert audit_rows[0]["category"] == "skincare/beauty"
+    assert audit_rows[0]["source_names"] == "test"
+
+
+def test_export_evidence_report_and_audit_share_unique_domain_set(tmp_path) -> None:
+    db = Database(tmp_path / "pipeline.sqlite3")
+    for index, candidate_url in enumerate(("https://brand.in/", "https://www.brand.in/"), start=1):
+        db.add_candidate(candidate_url, "brand.in", "test", candidate_url)
+        row = db.pending_candidates()[0]
+        record = accepted_record()
+        record.shopify_score += index
+        db.save_store(row["id"], record)
+
+    csv_path, evidence_path = export_results(db, tmp_path / "results")
+    assert len(list(csv.DictReader(csv_path.open(encoding="utf-8")))) == 1
+    assert len(evidence_path.read_text(encoding="utf-8").splitlines()) == 1
+
+    report_path = write_report(db, tmp_path / "reports")
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["accepted_records"] == 1
+    assert report["accepted_candidate_records"] == 2
+    assert report["redirect_duplicates_removed"] == 1
+
+    audit_path = write_audit_sample(db, tmp_path / "reports", 100, 1)
+    assert len(list(csv.DictReader(audit_path.open(encoding="utf-8")))) == 1
 

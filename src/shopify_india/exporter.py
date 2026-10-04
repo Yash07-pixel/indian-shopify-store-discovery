@@ -14,19 +14,28 @@ from .models import StoreRecord, utc_now
 CSV_FIELDS = ["domain_url", "contacts", "socials", "category", "description", "logo_url", "state"]
 
 
+def unique_domain_records(records: list[StoreRecord]) -> list[StoreRecord]:
+    """Keep the highest-confidence record for each final storefront origin."""
+    output: list[StoreRecord] = []
+    seen: set[str] = set()
+    for record in sorted(records, key=lambda item: item.shopify_score + item.india_score, reverse=True):
+        domain = record.domain_url.lower().rstrip("/")
+        if domain in seen:
+            continue
+        seen.add(domain)
+        output.append(record)
+    return output
+
+
 def export_results(db: Database, results_dir: Path) -> tuple[Path, Path]:
     results_dir.mkdir(parents=True, exist_ok=True)
-    records = db.accepted_records()
+    records = unique_domain_records(db.accepted_records())
     csv_path = results_dir / "indian_shopify_stores.csv"
     evidence_path = results_dir / "audit_evidence.jsonl"
-    seen: set[str] = set()
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=CSV_FIELDS)
         writer.writeheader()
         for record in records:
-            if record.domain_url in seen:
-                continue
-            seen.add(record.domain_url)
             writer.writerow({
                 "domain_url": record.domain_url,
                 "contacts": json.dumps(record.contacts, ensure_ascii=False, sort_keys=True),
@@ -56,18 +65,29 @@ def _manual_audit_summary(path: Path) -> dict[str, object]:
 
     shopify_precision = sum(is_yes(row["shopify_correct"]) for row in reviewed) / len(reviewed)
     india_precision = sum(is_yes(row["india_correct"]) for row in reviewed) / len(reviewed)
+    field_accuracy: dict[str, dict[str, float | int]] = {}
+    for field in ("contacts", "socials", "category", "description", "logo", "state"):
+        column = f"{field}_correct"
+        rated = [row for row in rows if row.get(column, "").strip()]
+        if rated:
+            field_accuracy[field] = {
+                "reviewed": len(rated),
+                "accuracy_percent": round(sum(is_yes(row[column]) for row in rated) * 100 / len(rated), 2),
+            }
     return {
         "status": "pass" if shopify_precision >= 0.95 and india_precision >= 0.95 else "fail",
         "reviewed": len(reviewed),
         "shopify_precision_percent": round(shopify_precision * 100, 2),
         "india_precision_percent": round(india_precision * 100, 2),
         "required_precision_percent": 95.0,
+        "field_accuracy": field_accuracy,
     }
 
 
 def build_quality_report(db: Database, audit_path: Path | None = None) -> dict[str, object]:
     records = db.all_records()
-    accepted = [record for record in records if record.accepted]
+    accepted_candidates = [record for record in records if record.accepted]
+    accepted = unique_domain_records(accepted_candidates)
     missing = Counter()
     for record in accepted:
         for field in ("contacts", "socials", "category", "description", "logo_url", "state"):
@@ -86,6 +106,8 @@ def build_quality_report(db: Database, audit_path: Path | None = None) -> dict[s
         "candidate_status_counts": db.counts(),
         "processed_records": len(records),
         "accepted_records": total,
+        "accepted_candidate_records": len(accepted_candidates),
+        "redirect_duplicates_removed": len(accepted_candidates) - total,
         "rejection_reasons": dict(rejected),
         "missing_fields": {
             field: {"count": missing[field], "percent": round(missing[field] * 100 / total, 2) if total else 0.0}
@@ -104,18 +126,18 @@ def build_quality_report(db: Database, audit_path: Path | None = None) -> dict[s
     }
 
 
-def write_report(db: Database, reports_dir: Path) -> Path:
+def write_report(db: Database, reports_dir: Path, audit_path: Path | None = None) -> Path:
     reports_dir.mkdir(parents=True, exist_ok=True)
     path = reports_dir / "quality_report.json"
     path.write_text(
-        json.dumps(build_quality_report(db, reports_dir / "manual_audit.csv"), indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        json.dumps(build_quality_report(db, audit_path or reports_dir / "manual_audit.csv"), indent=2, ensure_ascii=False, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     return path
 
 
-def write_audit_sample(db: Database, reports_dir: Path, size: int, seed: int) -> Path:
-    records = db.accepted_records()
+def write_audit_sample(db: Database, reports_dir: Path, size: int, seed: int, filename: str = "manual_audit.csv") -> Path:
+    records = unique_domain_records(db.accepted_records())
     rng = random.Random(seed)
     groups: dict[tuple[str, str], list[StoreRecord]] = defaultdict(list)
     for record in records:
@@ -133,16 +155,30 @@ def write_audit_sample(db: Database, reports_dir: Path, size: int, seed: int) ->
                 next_keys.append(key)
         keys = next_keys
     reports_dir.mkdir(parents=True, exist_ok=True)
-    path = reports_dir / "manual_audit.csv"
-    fields = ["domain_url", "state", "shopify_score", "india_score", "shopify_correct", "india_correct", "fields_correct", "reviewer_notes"]
+    path = reports_dir / filename
+    fields = [
+        "domain_url", "contacts", "socials", "category", "description", "logo_url", "state",
+        "source_names", "shopify_score", "india_score", "shopify_correct", "india_correct",
+        "contacts_correct", "socials_correct", "category_correct", "description_correct",
+        "logo_correct", "state_correct", "fields_correct", "reviewer_notes",
+    ]
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         for record in selected:
             writer.writerow({
-                "domain_url": record.domain_url, "state": record.state,
+                "domain_url": record.domain_url,
+                "contacts": json.dumps(record.contacts, ensure_ascii=False, sort_keys=True),
+                "socials": json.dumps(record.socials, ensure_ascii=False, sort_keys=True),
+                "category": record.category,
+                "description": record.description,
+                "logo_url": record.logo_url,
+                "state": record.state,
+                "source_names": ";".join(sorted(record.source_names)),
                 "shopify_score": record.shopify_score, "india_score": record.india_score,
-                "shopify_correct": "", "india_correct": "", "fields_correct": "", "reviewer_notes": "",
+                "shopify_correct": "", "india_correct": "", "contacts_correct": "",
+                "socials_correct": "", "category_correct": "", "description_correct": "",
+                "logo_correct": "", "state_correct": "", "fields_correct": "", "reviewer_notes": "",
             })
     return path
 

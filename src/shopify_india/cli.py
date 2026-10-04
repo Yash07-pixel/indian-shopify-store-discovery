@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 import json
 from pathlib import Path
 from typing import Annotated
@@ -60,6 +61,8 @@ def run_pipeline(
     max_candidates: Annotated[int | None, typer.Option(min=1, help="Optional cap for a smoke or staged run.")] = None,
     skip_discovery: Annotated[bool, typer.Option(help="Do not auto-discover when the database is empty.")] = False,
     skip_master: Annotated[bool, typer.Option(help="Skip the large public master list during auto-discovery.")] = False,
+    source: Annotated[str | None, typer.Option(help="Only process candidates attributed to this source name.")] = None,
+    unique_target: Annotated[int | None, typer.Option(min=1, help="Stop at this many unique accepted final domains.")] = None,
     root: Annotated[Path | None, typer.Option(help="Project root; defaults to the current directory.")] = None,
 ) -> None:
     """Resume crawling pending candidates until the verified target is reached."""
@@ -69,7 +72,12 @@ def run_pipeline(
         if not db.counts() and not skip_discovery:
             await discover_async(settings, db, [], skip_master)
         async with RespectfulFetcher(settings) as fetcher:
-            return await Pipeline(settings, db, fetcher).run(target=target, max_candidates=max_candidates)
+            return await Pipeline(settings, db, fetcher).run(
+                target=target,
+                max_candidates=max_candidates,
+                source_name=source,
+                unique_target=unique_target,
+            )
 
     typer.echo(json.dumps(asyncio.run(execute()), indent=2))
 
@@ -95,25 +103,81 @@ def export(
 def audit_sample(
     size: Annotated[int, typer.Option(min=1)] = 100,
     seed: Annotated[int, typer.Option()] = 20261002,
+    output: Annotated[str, typer.Option(help="Worksheet filename inside reports/.")] = "manual_audit.csv",
     root: Annotated[Path | None, typer.Option()] = None,
 ) -> None:
     """Create a reproducible, stratified manual-review worksheet."""
     settings, db = context(root)
-    typer.echo(write_audit_sample(db, settings.reports_dir, size, seed))
+    if Path(output).name != output or not output.lower().endswith(".csv"):
+        raise typer.BadParameter("--output must be a CSV filename, not a path.")
+    typer.echo(write_audit_sample(db, settings.reports_dir, size, seed, output))
 
 
 @app.command()
-def report(root: Annotated[Path | None, typer.Option()] = None) -> None:
+def report(
+    audit_file: Annotated[Path | None, typer.Option(help="Optional audit worksheet to summarize.")] = None,
+    root: Annotated[Path | None, typer.Option()] = None,
+) -> None:
     """Regenerate aggregate quality and missing-field statistics."""
     settings, db = context(root)
-    typer.echo(write_report(db, settings.reports_dir))
+    typer.echo(write_report(db, settings.reports_dir, audit_file))
 
 
 @app.command()
 def status(root: Annotated[Path | None, typer.Option()] = None) -> None:
     """Show resumable pipeline progress."""
     _, db = context(root)
-    typer.echo(json.dumps(db.counts(), indent=2))
+    counts = db.counts()
+    counts["unique_accepted_domains"] = db.accepted_unique_domain_count()
+    typer.echo(json.dumps(counts, indent=2))
+
+
+@app.command()
+def reextract(
+    audit_file: Annotated[Path | None, typer.Option(help="Optionally limit work to domains in an audit CSV.")] = None,
+    domain: Annotated[list[str] | None, typer.Option("--domain", help="Refresh one or more specific storefront domains.")] = None,
+    only_registered_india: Annotated[bool, typer.Option(help="Refresh rows whose sole strong India signal is registered-office text.")] = False,
+    only_reviewed: Annotated[bool, typer.Option("--only-reviewed/--all-audit-rows", help="With --audit-file, include only rows that contain a review decision or note.")] = True,
+    limit: Annotated[int | None, typer.Option(min=1, help="Optional safety cap for a staged repair run.")] = None,
+    validate_images: Annotated[bool, typer.Option("--validate-images/--no-validate-images", help="Make an extra request to validate each newly selected logo.")] = False,
+    force: Annotated[bool, typer.Option("--force/--resume", help="Reprocess records already written by the current extractor version.")] = False,
+    root: Annotated[Path | None, typer.Option(help="Project root; defaults to the current directory.")] = None,
+) -> None:
+    """Re-run improved field extraction; reuse cached secondary pages when possible."""
+    settings, db = context(root)
+    if sum((audit_file is not None, bool(domain), only_registered_india)) > 1:
+        raise typer.BadParameter("Use only one of --audit-file, --domain, or --only-registered-india.")
+    domains: set[str] | None = set(domain or []) or None
+    if only_registered_india:
+        domains = {
+            record.domain_url for record in db.accepted_records()
+            if {item.kind for item in record.india_evidence if item.strength == "strong"} == {"registered_india"}
+        }
+        force = True
+    if audit_file is not None:
+        with audit_file.open(encoding="utf-8-sig", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        review_columns = (
+            "shopify_correct", "india_correct", "fields_correct", "contacts_correct",
+            "socials_correct", "category_correct", "description_correct", "logo_correct",
+            "state_correct", "reviewer_notes",
+        )
+        if only_reviewed:
+            rows = [row for row in rows if any(row.get(column, "").strip() for column in review_columns)]
+        domains = {row["domain_url"].strip() for row in rows if row.get("domain_url", "").strip()}
+        if not domains:
+            raise typer.BadParameter("The audit file contains no matching reviewed domains.")
+
+    async def execute() -> dict[str, int]:
+        async with RespectfulFetcher(settings) as fetcher:
+            return await Pipeline(settings, db, fetcher).refresh_extractions(
+                domains=domains, limit=limit, validate_images=validate_images, force=force,
+                progress=lambda done, total, completed, errors: typer.echo(
+                    f"reextract progress: {done}/{total} selected, {completed} saved, {errors} errors"
+                ),
+            )
+
+    typer.echo(json.dumps(asyncio.run(execute()), indent=2))
 
 
 @app.command(name="diagnose-common-crawl")

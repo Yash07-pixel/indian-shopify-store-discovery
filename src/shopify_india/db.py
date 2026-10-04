@@ -91,12 +91,20 @@ class Database:
                 )
         return added, len(rows)
 
-    def pending_candidates(self, limit: int | None = None) -> list[sqlite3.Row]:
-        sql = "SELECT * FROM candidates WHERE status IN ('pending','retry') ORDER BY id"
+    def pending_candidates(self, limit: int | None = None, source_name: str | None = None) -> list[sqlite3.Row]:
         params: tuple[object, ...] = ()
+        if source_name:
+            sql = (
+                "SELECT DISTINCT c.* FROM candidates c "
+                "JOIN candidate_sources s ON s.candidate_id=c.id "
+                "WHERE c.status IN ('pending','retry') AND s.source_name=? ORDER BY c.id"
+            )
+            params = (source_name,)
+        else:
+            sql = "SELECT * FROM candidates WHERE status IN ('pending','retry') ORDER BY id"
         if limit is not None:
             sql += " LIMIT ?"
-            params = (limit,)
+            params = (*params, limit)
         with self.connect() as conn:
             return list(conn.execute(sql, params))
 
@@ -142,6 +150,25 @@ class Database:
         with self.connect() as conn:
             rows = conn.execute("SELECT record_json FROM stores WHERE accepted=1 ORDER BY shopify_score+india_score DESC").fetchall()
         return [StoreRecord.model_validate_json(row[0]) for row in rows]
+
+    def accepted_candidate_rows(self) -> list[sqlite3.Row]:
+        """Return candidate metadata and its current record for safe re-extraction."""
+        with self.connect() as conn:
+            return list(conn.execute(
+                """SELECT c.*, s.record_json FROM candidates c
+                   JOIN stores s ON s.candidate_id=c.id
+                   WHERE s.accepted=1 ORDER BY c.id"""
+            ))
+
+    def candidate_rows_with_records(self) -> list[sqlite3.Row]:
+        with self.connect() as conn:
+            return list(conn.execute(
+                """SELECT c.*, s.record_json FROM candidates c
+                   JOIN stores s ON s.candidate_id=c.id ORDER BY c.id"""
+            ))
+
+    def accepted_unique_domain_count(self) -> int:
+        return len({record.domain_url.lower().rstrip("/") for record in self.accepted_records()})
 
     def all_records(self) -> list[StoreRecord]:
         with self.connect() as conn:

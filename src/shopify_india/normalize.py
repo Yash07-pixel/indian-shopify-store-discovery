@@ -14,7 +14,7 @@ OBFUSCATED_EMAIL_RE = re.compile(
     r"(?ix)\b([a-z0-9][a-z0-9._%+-]*)\s*(?:\[at\]|\(at\)|\sat\s)\s*"
     r"([a-z0-9.-]+)\s*(?:\[dot\]|\(dot\)|\sdot\s)\s*([a-z]{2,})\b"
 )
-TLD_EXTRACTOR = tldextract.TLDExtract(suffix_list_urls=())
+TLD_EXTRACTOR = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None)
 
 
 def normalize_url(value: str, base: str | None = None) -> str:
@@ -71,8 +71,55 @@ def canonical_social_url(value: str) -> str:
     if not normalized:
         return ""
     parts = urlsplit(normalized)
-    path = parts.path.rstrip("/")
-    return urlunsplit(("https", parts.netloc.lower(), path, "", ""))
+    host = (parts.hostname or "").lower().removeprefix("www.").removeprefix("m.")
+    segments = [segment for segment in parts.path.split("/") if segment]
+    lowered = [segment.lower() for segment in segments]
+
+    # A post, reel, sharing dialog, or login page is not a business profile.
+    # Keeping only profile-shaped URLs also prevents hundreds of embedded feed
+    # links from being reported as separate social accounts.
+    if host == "instagram.com":
+        if not segments or lowered[0] in {
+            "p", "reel", "reels", "stories", "explore", "accounts", "share", "direct",
+        }:
+            return ""
+        path = "/" + segments[0]
+    elif host in {"twitter.com", "x.com"}:
+        if not segments or lowered[0] in {"intent", "share", "search", "home", "i", "hashtag"}:
+            return ""
+        host = "x.com"
+        path = "/" + segments[0]
+    elif host in {"facebook.com", "fb.com"}:
+        if not segments or lowered[0] in {
+            "share", "sharer", "sharer.php", "dialog", "login", "plugins", "watch",
+            "photo", "photos", "posts", "reel", "reels", "events",
+        }:
+            return ""
+        host = "facebook.com"
+        if lowered[0] == "profile.php":
+            profile_id = next((v for k, v in parse_qsl(parts.query) if k.lower() == "id" and v.isdigit()), "")
+            if not profile_id:
+                return ""
+            return f"https://facebook.com/profile.php?id={profile_id}"
+        keep = 3 if lowered[0] == "people" else 1
+        path = "/" + "/".join(segments[:keep])
+    elif host == "linkedin.com":
+        if len(segments) < 2 or lowered[0] not in {"company", "in", "school", "showcase"}:
+            return ""
+        path = "/" + "/".join(segments[:2])
+    elif host in {"youtube.com", "youtu.be"}:
+        if host == "youtu.be" or not segments or lowered[0] in {"watch", "shorts", "playlist", "results"}:
+            return ""
+        host = "youtube.com"
+        if segments[0].startswith("@"):
+            path = "/" + segments[0]
+        elif lowered[0] in {"channel", "user", "c"} and len(segments) >= 2:
+            path = "/" + "/".join(segments[:2])
+        else:
+            return ""
+    else:
+        path = parts.path.rstrip("/")
+    return urlunsplit(("https", host, path, "", ""))
 
 
 def extract_emails(text: str) -> list[str]:
