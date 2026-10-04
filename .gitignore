@@ -14,3 +14,4 @@ logs/*
 !data/cache/.gitkeep
 !logs/.gitkeep
 
+reports/manual_audit*.csv
